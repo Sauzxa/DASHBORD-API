@@ -1,5 +1,6 @@
 // /controllers/authcontrollers/signUp.controller.js
-const supabase = require('../../config/supabaseClient');
+
+const supabase = require("../../config/supabaseClient");
 
 // User Sign-Up (Create Account)
 exports.signUp = async (req, res) => {

@@ -1,33 +1,37 @@
-require('dotenv').config(); // Load environment variables from .env file
+require('dotenv').config({ path: './config/.env' }); // Ensure the correct path to the .env file
 const express = require("express");
 const cors = require("cors");
-const supabase = require('./app/config/supabaseClient'); // Ensure this file uses env variables
+const supabase = require('./app/config/supabaseClient'); // Ensure the correct path to the Supabase client configuration
 const { create } = require("./app/controllers/addHauberge.controller");
 const { delete: deleteHauberg } = require("./app/controllers/deleteHauberg.controller");
-const authMiddleware = require("./app/middleware/authMiddleware"); // Include auth middleware
+const authMiddleware = require("./app/middleware/authMiddleware"); // Include the correct path for middleware
 
 const app = express();
 
 // Middleware setup
 app.use(cors());
-app.use(express.json()); // Use built-in Express middleware for JSON
+app.use(express.json()); // Use built-in Express middleware for JSON parsing
 
-// Helper function to check superadmin with email, password, and ID
-const checkSuperAdmin = async (email, password, userId) => {
-  const { data, error } = await supabase
-    .from("users")
-    .select("id, email, password, role")
-    .eq("email", email)
-    .eq("password", password) // Ensure passwords are hashed and validated securely
-    .eq("id", userId)
-    .single();
+// Helper function to check if the user is a superadmin by email, hashed password, and ID
+const checkSuperAdmin = async (email, userId) => {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, email, role")
+      .eq("email", email)
+      .eq("id", userId)
+      .single();
 
-  if (error) {
-    console.error("Error fetching user:", error.message);
-    throw new Error("Could not verify superadmin credentials.");
+    if (error) {
+      console.error("Error fetching user:", error.message);
+      throw new Error("Could not verify superadmin credentials.");
+    }
+
+    return data.role === 0; // Return true if the user role is superadmin (role = 0)
+  } catch (err) {
+    console.error("Error in checkSuperAdmin:", err.message);
+    throw err;
   }
-
-  return data.role === 0; // Return true if role is superadmin (role = 0)
 };
 
 // Route to fetch all Hauberg data (public route)
@@ -48,14 +52,14 @@ app.get("/haubergs", async (req, res) => {
 // Route to create a new Hauberg (protected route)
 app.post("/haubergs", authMiddleware, async (req, res) => {
   try {
-    const { email, password, id } = req.user; // Extract user info from middleware
+    const { email, id } = req.user; // Extract user info from middleware
 
-    const isSuperAdmin = await checkSuperAdmin(email, password, id);
+    const isSuperAdmin = await checkSuperAdmin(email, id);
     if (!isSuperAdmin) {
       return res.status(403).json({ message: "Access denied: Superadmin role required." });
     }
 
-    await create(req, res);
+    await create(req, res); // Call the create controller
   } catch (err) {
     console.error("Error occurred while creating Hauberg:", err.message);
     res.status(500).json({ message: "Error creating Hauberg." });
@@ -65,14 +69,14 @@ app.post("/haubergs", authMiddleware, async (req, res) => {
 // Route to delete a Hauberg by ID (protected route)
 app.delete("/haubergs/:id", authMiddleware, async (req, res) => {
   try {
-    const { email, password, id } = req.user; // Extract user info from middleware
+    const { email, id } = req.user; // Extract user info from middleware
 
-    const isSuperAdmin = await checkSuperAdmin(email, password, id);
+    const isSuperAdmin = await checkSuperAdmin(email, id);
     if (!isSuperAdmin) {
       return res.status(403).json({ message: "Access denied: Superadmin role required." });
     }
 
-    await deleteHauberg(req, res);
+    await deleteHauberg(req, res); // Call the delete controller
   } catch (err) {
     console.error("Error occurred while deleting Hauberg:", err.message);
     res.status(500).json({ message: "Error deleting Hauberg." });
