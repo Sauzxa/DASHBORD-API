@@ -1,32 +1,36 @@
-const jwt = require('jsonwebtoken'); // Add this if needed for custom JWT validation
-const supabase = require('../config/supabaseClient');
+const supabase = require('../config/supabaseClient'); // Ensure the correct path to your Supabase client
 
 const authMiddleware = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Unauthorized: Token is missing or malformed." });
+    // Assuming the client sends 'email' and 'userId' in the request body
+    const { email, userId } = req.body;
+    if (!email || !userId) {
+      return res.status(400).json({ message: "Bad Request: email and userId are required." });
     }
 
-    const token = authHeader.split(" ")[1]; // Extract the token from the "Authorization" header
+    // Fetch the user details from Supabase based on the email and userId
+    const { data: userDetails, error: userError } = await supabase
+      .from("users")
+      .select("id, email, role")
+      .eq("id", userId)
+      .eq("email", email)
+      .single();
 
-    // Option 1: Validate the token using Supabase
-    const { data: user, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      console.error("Error verifying token:", error?.message);
-      return res.status(401).json({ message: "Unauthorized: Invalid or expired token." });
+    if (userError || !userDetails) {
+      console.error("Error fetching user details:", userError?.message);
+      return res.status(500).json({ message: "Error verifying user details." });
     }
 
-    // Option 2: Validate the token server-side with a library like 'jsonwebtoken'
-    // Uncomment this if you use a custom JWT for Supabase service role
-    // const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
-    // const userId = decoded.sub; // Extract the user ID from the token
-    // const { data: user, error } = await supabase.auth.admin.getUserById(userId);
+    // Check if the user has a superadmin role (role === 0)
+    if (userDetails.role !== 0) {
+      return res.status(403).json({ message: "Forbidden: Only superadmins can access this resource." });
+    }
 
-    // Attach user information to the request object
+    // Attach the user information to the request object
     req.user = {
-      email: user.email,
-      id: user.id,
+      email: userDetails.email,
+      id: userDetails.id,
+      role: userDetails.role,  // Include the role if needed
     };
 
     next(); // Proceed to the next middleware or route handler

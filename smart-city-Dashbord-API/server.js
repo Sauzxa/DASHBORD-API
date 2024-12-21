@@ -1,85 +1,83 @@
-require('dotenv').config({ path: './config/.env' }); // Ensure the correct path to the .env file
 const express = require("express");
 const cors = require("cors");
-const supabase = require('./app/config/supabaseClient'); // Ensure the correct path to the Supabase client configuration
+const supabase = require('./app/config/supabaseClient');
 const { create } = require("./app/controllers/addHauberge.controller");
 const { delete: deleteHauberg } = require("./app/controllers/deleteHauberg.controller");
-const authMiddleware = require("./app/middleware/authMiddleware"); // Include the correct path for middleware
 
 const app = express();
 
 // Middleware setup
 app.use(cors());
-app.use(express.json()); // Use built-in Express middleware for JSON parsing
+app.use(express.json());
 
-// Helper function to check if the user is a superadmin by email, hashed password, and ID
-const checkSuperAdmin = async (email, userId) => {
-  try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, email, role")
-      .eq("email", email)
-      .eq("id", userId)
-      .single();
+// Login route to authenticate superadmin with hardcoded credentials
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
-    if (error) {
-      console.error("Error fetching user:", error.message);
-      throw new Error("Could not verify superadmin credentials.");
+  // Check if the provided email and password match the superadmin credentials
+  if (email === "boumerdes@gmail.com" && password === "123") {
+    try {
+      // Fetch all Hauberg data if credentials are valid
+      const { data, error } = await supabase.from("hauberg").select("*");
+      if (error) {
+        console.error("Error fetching Hauberg data:", error.message);
+        return res.status(500).json({ message: "Error fetching Haubergs" });
+      }
+      // Return Hauberg data along with a success message
+      return res.status(200).json({ message: "Login successful. Superadmin authenticated.", haubergs: data });
+    } catch (err) {
+      console.error("Error occurred:", err.message);
+      return res.status(500).json({ message: "Some error occurred while fetching Hauberg data." });
     }
-
-    return data.role === 0; // Return true if the user role is superadmin (role = 0)
-  } catch (err) {
-    console.error("Error in checkSuperAdmin:", err.message);
-    throw err;
+  } else {
+    return res.status(401).json({ message: "Invalid email or password." });
   }
-};
+});
 
-// Route to fetch all Hauberg data (public route)
+
+// Route to fetch all Hauberg data (protected for superadmin)
 app.get("/haubergs", async (req, res) => {
-  try {
-    const { data, error } = await supabase.from("hauberg").select("*");
-    if (error) {
-      console.error("Error fetching Hauberg data:", error.message);
-      return res.status(500).json({ message: error.message || "Error fetching Haubergs" });
+  const { email, password } = req.body;
+
+  // Check for superadmin credentials
+  if (email === "boumerdes@gmail.com" && password === "123") {
+    try {
+      const { data, error } = await supabase.from("hauberg").select("*");
+      if (error) {
+        console.error("Error fetching Hauberg data:", error.message);
+        return res.status(500).json({ message: error.message || "Error fetching Haubergs" });
+      }
+      res.status(200).json(data);
+    } catch (err) {
+      console.error("Error occurred:", err.message);
+      res.status(500).json({ message: "Some error occurred while fetching Hauberg data." });
     }
-    res.status(200).json(data);
-  } catch (err) {
-    console.error("Error occurred:", err.message);
-    res.status(500).json({ message: "Some error occurred while fetching Hauberg data." });
+  } else {
+    return res.status(403).json({ message: "Access denied. Superadmin role required." });
   }
 });
 
-// Route to create a new Hauberg (protected route)
-app.post("/haubergs", authMiddleware, async (req, res) => {
-  try {
-    const { email, id } = req.user; // Extract user info from middleware
+// Route to create a new Hauberg (protected for superadmin)
+app.post("/haubergs", async (req, res) => {
+  const { email, password } = req.body;
 
-    const isSuperAdmin = await checkSuperAdmin(email, id);
-    if (!isSuperAdmin) {
-      return res.status(403).json({ message: "Access denied: Superadmin role required." });
-    }
-
-    await create(req, res); // Call the create controller
-  } catch (err) {
-    console.error("Error occurred while creating Hauberg:", err.message);
-    res.status(500).json({ message: "Error creating Hauberg." });
+  // Check for superadmin credentials
+  if (email === "boumerdes@gmail.com" && password === "123") {
+    await create(req, res);
+  } else {
+    return res.status(403).json({ message: "Access denied. Superadmin role required." });
   }
 });
 
-// Route to delete a Hauberg by ID (protected route)
-app.delete("/haubergs/:id", authMiddleware, async (req, res) => {
-  try {
-    const { email, id } = req.user; // Extract user info from middleware
+// Route to delete a Hauberg by ID (protected for superadmin)
+app.delete("/haubergs/:id", async (req, res) => {
+  const { email, password } = req.body;
 
-    const isSuperAdmin = await checkSuperAdmin(email, id);
-    if (!isSuperAdmin) {
-      return res.status(403).json({ message: "Access denied: Superadmin role required." });
-    }
-
-    await deleteHauberg(req, res); // Call the delete controller
-  } catch (err) {
-    console.error("Error occurred while deleting Hauberg:", err.message);
-    res.status(500).json({ message: "Error deleting Hauberg." });
+  // Check for superadmin credentials
+  if (email === "boumerdes@gmail.com" && password === "123") {
+    await deleteHauberg(req, res);
+  } else {
+    return res.status(403).json({ message: "Access denied. Superadmin role required." });
   }
 });
 
